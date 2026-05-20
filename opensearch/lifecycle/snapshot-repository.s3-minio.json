@@ -3,6 +3,7 @@
   "settings": {
     "bucket": "dataskope-opensearch-snapshots",
     "base_path": "opensearch-retention-poc",
+    "region": "us-east-1",
     "endpoint": "minio:9000",
     "protocol": "http",
     "path_style_access": true,

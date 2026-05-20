@@ -430,6 +430,17 @@ New implementation direction:
 - Real retention policy is `opensearch/lifecycle/dataskope-ism-policy.hot-cold-snapshot-10-10.poc.json`: 10d hot, 10d cold, then snapshot/searchable snapshot.
 - `bootstrap-lifecycle.ps1` now defaults to the 10+10 policy and the S3/MinIO repository file.
 
+Remote smoke validation on docker-os-cls:
+
+- Real dump smoke used `/events_2025_12_07.data.json`, 4,833,828 raw bytes.
+- Producer replay streamed 3,923 events, sent 3,923, rejected 0, parse errors 0.
+- Writer created `events_2025_12_07` with `index.creation_date=1765065600000`.
+- ISM reconciler attached `events-hot-cold-snapshot-10-10`; the index moved hot -> cold -> snapshot_ready and shards relocated to `opensearch-cold`.
+- Snapshot `events_2025_12_07-2026.05.20-12:31:05.542` completed successfully in MinIO/S3.
+- Manual native snapshot restore created `remote_events_2025_12_07` with `index.store.type=remote_snapshot`; search returned 3,923 docs.
+- Measured smoke sizes: cold source primary store 4,158,925 B, remote primary store 4,158,925 B, MinIO repo 4,235,026 B.
+- Important gap: ISM `convert_index_to_remote` on OpenSearch/index-management 3.6.0.0 failed validation with `Index [index=events_2025_12_07] already exists, cannot restore over existing index`, while manual native restore API succeeded. Treat automatic ISM conversion as blocked until clarified/fixed.
+
 Important user constraint:
 
 - Do not re-check `/events_*` dump readiness until the user says the elasticdump run is done.

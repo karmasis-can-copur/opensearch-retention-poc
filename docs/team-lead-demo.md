@@ -117,3 +117,9 @@ Show these screens:
 - Hot data is fully local and fastest.
 - Cold data is local, read-only, force-merged, and searchable.
 - Searchable snapshot data is stored mainly in MinIO and remains searchable with a local cache.
+
+## Current Open Item
+
+In OpenSearch `3.6.0`, the MinIO repository and native `remote_snapshot` restore work, but the ISM `convert_index_to_remote` action currently fails validation with `Index already exists`.
+
+Use `docs/real-dump-smoke-2026-05-20.md` as the evidence note. The remaining decision is whether to wait for a native ISM fix/clarification or temporarily use the native restore API script after ISM snapshot.

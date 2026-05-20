@@ -88,6 +88,7 @@ The replay mode streams elasticdump lines, extracts `_source`, routes by `TimeCr
 
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Dev Team Lead Demo Runbook](docs/team-lead-demo.md)
+- [Real Dump Smoke 2026-05-20](docs/real-dump-smoke-2026-05-20.md)
 - [Architecture Comparison](docs/architecture-comparison.md)
 - [Search Guidelines](docs/search-guidelines.md)
 - [Cluster Calculator](docs/calculator.md)

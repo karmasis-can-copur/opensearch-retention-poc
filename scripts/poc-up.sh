@@ -8,6 +8,16 @@ fi
 
 mkdir -p artifacts/rejected-events
 
+docker_cmd=(docker)
+if ! docker ps >/dev/null 2>&1; then
+  if sudo -n docker ps >/dev/null 2>&1; then
+    docker_cmd=(sudo docker)
+  else
+    echo "Docker is not accessible. Add the user to docker group or run with sudo." >&2
+    exit 1
+  fi
+fi
+
 services=(
   minio
   minio-init
@@ -19,7 +29,7 @@ services=(
   ism-policy-reconciler
 )
 
-docker compose -f docker-compose.yml -f docker-compose.server.yml up -d --build "${services[@]}"
+"${docker_cmd[@]}" compose -f docker-compose.yml -f docker-compose.server.yml up -d --build "${services[@]}"
 
 echo ""
 echo "PoC stack started."

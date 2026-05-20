@@ -4,6 +4,10 @@ set -euo pipefail
 opensearch_url="${OPENSEARCH_URL:-http://localhost:9200}"
 dashboard_url="${DASHBOARD_URL:-http://localhost:9205}"
 minio_data_dir="${MINIO_DATA_DIR:-/data/minio}"
+docker_cmd=(docker)
+if ! docker ps >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
+  docker_cmd=(sudo docker)
+fi
 
 echo "== Cluster health =="
 curl -fsS "$opensearch_url/_cat/health?v" || true
@@ -50,7 +54,7 @@ fi
 
 echo ""
 echo "== Container resources =="
-docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.BlockIO}}" 2>/dev/null \
+"${docker_cmd[@]}" stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.BlockIO}}" 2>/dev/null \
   | awk 'NR==1 || /opensearch-|dataskope-minio|retention-dashboard/' || true
 
 echo ""

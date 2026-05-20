@@ -54,7 +54,7 @@ if (-not $KeepDefaultIsmInterval) {
                     job_interval = 1
                     jitter = 0.0
                     action_validation = @{
-                        enabled = $true
+                        enabled = $false
                     }
                 }
             }

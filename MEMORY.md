@@ -439,7 +439,7 @@ Remote smoke validation on docker-os-cls:
 - Snapshot `events_2025_12_07-2026.05.20-12:31:05.542` completed successfully in MinIO/S3.
 - Manual native snapshot restore created `remote_events_2025_12_07` with `index.store.type=remote_snapshot`; search returned 3,923 docs.
 - Measured smoke sizes: cold source primary store 4,158,925 B, remote primary store 4,158,925 B, MinIO repo 4,235,026 B.
-- Important gap: ISM `convert_index_to_remote` on OpenSearch/index-management 3.6.0.0 failed validation with `Index [index=events_2025_12_07] already exists, cannot restore over existing index`, while manual native restore API succeeded. Treat automatic ISM conversion as blocked until clarified/fixed.
+- Important correction: ISM `convert_index_to_remote` on OpenSearch/index-management 3.6.0.0 failed only because `plugins.index_state_management.action_validation.enabled=true` runs `ValidateConvertIndexToRemote`, whose bytecode checks `indexExists(indexName)` against the source managed index before restore. Bootstrap now sets action validation to false so the native restore step can run.
 
 Important user constraint:
 

@@ -101,8 +101,9 @@ Validation Status is: FAILED. The action is convert_index_to_remote, state is sn
 
 The repository and snapshot are healthy because the same snapshot restored successfully as `remote_snapshot` through the native snapshot restore API. This isolates the problem to the ISM `convert_index_to_remote` action path, not MinIO/S3 or snapshot restore.
 
-Current recommendation:
+Resolution:
 
-- Keep ISM for hot -> cold -> snapshot.
-- Treat automatic ISM `convert_index_to_remote` as blocked until the OpenSearch 3.6 behavior is clarified or fixed.
-- For the next demo, show searchable snapshot using the native restore API script, and explicitly call out that this is the remaining gap before removing every Curator-like operational step.
+- Keep ISM for hot -> cold -> snapshot -> searchable snapshot.
+- Set `plugins.index_state_management.action_validation.enabled=false` in the PoC bootstrap.
+- Reason: OpenSearch/index-management `3.6.0.0` validates `convert_index_to_remote` against the source managed index name before restore, so validation incorrectly fails while the source index still exists.
+- The actual restore step uses native snapshot restore with `storage_type=remote_snapshot`, fixed rename pattern `^(.*)$`, and the action's `rename_pattern` as the restore replacement. Manual restore already proved this path works with MinIO.

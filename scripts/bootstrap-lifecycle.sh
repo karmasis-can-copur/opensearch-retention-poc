@@ -37,7 +37,7 @@ fi
 
 curl -fsS -X PUT "$base_url/_cluster/settings" \
   -H 'content-type: application/json' \
-  -d '{"persistent":{"plugins":{"index_state_management":{"enabled":true,"job_interval":1,"jitter":0.0,"action_validation":{"enabled":true}}}}}' >/dev/null
+  -d '{"persistent":{"plugins":{"index_state_management":{"enabled":true,"job_interval":1,"jitter":0.0,"action_validation":{"enabled":false}}}}}' >/dev/null
 
 curl -fsS -X PUT "$base_url/_snapshot/$repo_name" \
   -H 'content-type: application/json' \

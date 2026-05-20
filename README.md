@@ -25,6 +25,8 @@ Current real-data target:
 
 ## Quick Start
 
+For the short demo path, use [Dev Team Lead Demo Runbook](docs/team-lead-demo.md).
+
 Copy the environment template and set MinIO values:
 
 ```bash
@@ -41,20 +43,14 @@ MINIO_BUCKET=dataskope-opensearch-snapshots
 Start the PoC cluster:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.server.yml up -d --build \
-  minio minio-init opensearch-hot opensearch-cold opensearch-search opensearch-dashboards retention-dashboard ism-policy-reconciler
+./scripts/poc-up.sh
 ```
 
 Bootstrap OpenSearch:
 
-```powershell
-.\scripts\bootstrap-lifecycle.ps1 `
-  -BaseUrl http://localhost:9200 `
-  -PolicyId events-hot-cold-snapshot-10-10 `
-  -PolicyFile .\opensearch\lifecycle\dataskope-ism-policy.hot-cold-snapshot-10-10.poc.json `
-  -RepositoryFile .\opensearch\lifecycle\snapshot-repository.s3-minio.json `
-  -IndexTemplateFile .\opensearch\lifecycle\dataskope-index-template.loadtest.json `
-  -ExpectedNodes 3
+```bash
+./scripts/bootstrap-lifecycle.sh
+./scripts/poc-status.sh
 ```
 
 Open:
@@ -91,6 +87,7 @@ The replay mode streams elasticdump lines, extracts `_source`, routes by `TimeCr
 ## Documentation
 
 - [Cheat Sheet](docs/cheatsheet.md)
+- [Dev Team Lead Demo Runbook](docs/team-lead-demo.md)
 - [Architecture Comparison](docs/architecture-comparison.md)
 - [Search Guidelines](docs/search-guidelines.md)
 - [Cluster Calculator](docs/calculator.md)

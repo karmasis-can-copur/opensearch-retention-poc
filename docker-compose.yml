@@ -11,11 +11,6 @@ services:
       - "9001:9001"
     volumes:
       - "${MINIO_DATA_DIR:-/data/minio}:/data"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
 
   minio-init:
     image: minio/mc:latest
@@ -23,7 +18,10 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - >
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          echo "Waiting for MinIO...";
+          sleep 2;
+        done &&
         mc mb -p local/"$$MINIO_BUCKET" || true
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER:-dataskope}"
@@ -31,7 +29,7 @@ services:
       MINIO_BUCKET: "${MINIO_BUCKET:-dataskope-opensearch-snapshots}"
     depends_on:
       minio:
-        condition: service_healthy
+        condition: service_started
 
   opensearch-snapshot-init:
     image: busybox:1.36

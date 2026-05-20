@@ -407,6 +407,11 @@ Artifacts:
 
 ## 2026-05-20 Real Dump + MinIO PoC Implementation Notes
 
+Dump completion note:
+
+- The real elasticdump files under `/` are treated as complete based on the operator signal; `.done` marker files are intentionally not part of the PoC scripts.
+- `scripts/preflight-real-dump.sh` and `scripts/run-real-retention-ingest.sh` only validate that expected dump files exist and are non-empty.
+
 Target repo is `https://github.com/karmasis-can-copur/opensearch-retention-poc` and should be pushed as a clean private PoC package.
 
 New implementation direction:

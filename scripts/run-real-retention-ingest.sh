@@ -11,15 +11,14 @@ current="$from_date"
 while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
   index="$(date -u -d "$current" +events_%Y_%m_%d)"
   file="${dump_dir%/}/${index}.data.json"
-  done_file="$file.done"
 
   if [[ ! -f "$file" ]]; then
     echo "Missing dump file: $file" >&2
     exit 1
   fi
 
-  if [[ ! -f "$done_file" ]]; then
-    echo "Dump file is not marked done yet: $done_file" >&2
+  if [[ ! -s "$file" ]]; then
+    echo "Dump file is empty: $file" >&2
     exit 1
   fi
 

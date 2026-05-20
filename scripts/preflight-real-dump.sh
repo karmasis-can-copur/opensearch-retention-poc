@@ -22,19 +22,16 @@ to_bytes() {
 
 sum_raw=0
 missing=0
-not_done=0
 files=0
 line_total=0
 current="$from_date"
 
-echo "date,index,file,done,raw_bytes,lines"
+echo "date,index,file,raw_bytes,lines"
 while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
   index="$(date_to_index "$current")"
   file="${dump_dir%/}/${index}.data.json"
-  done_file="$file.done"
   raw_bytes=0
   lines=""
-  done="false"
 
   if [[ ! -f "$file" ]]; then
     missing=$((missing + 1))
@@ -48,13 +45,7 @@ while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
     fi
   fi
 
-  if [[ -f "$done_file" ]]; then
-    done="true"
-  else
-    not_done=$((not_done + 1))
-  fi
-
-  echo "$current,$index,$file,$done,$raw_bytes,$lines"
+  echo "$current,$index,$file,$raw_bytes,$lines"
   current="$(date -u -d "$current + 1 day" +%F)"
 done
 
@@ -67,7 +58,6 @@ local_est="$(to_bytes "$(awk -v hot="$hot_est" -v cold="$cold_est" -v warm="$war
 echo ""
 echo "summary.files=$files"
 echo "summary.missing=$missing"
-echo "summary.not_done=$not_done"
 echo "summary.raw_bytes=$sum_raw"
 echo "summary.lines=$line_total"
 echo "estimate.hot_bytes=$hot_est"

@@ -440,6 +440,8 @@ Remote smoke validation on docker-os-cls:
 - Manual native snapshot restore created `remote_events_2025_12_07` with `index.store.type=remote_snapshot`; search returned 3,923 docs.
 - Measured smoke sizes: cold source primary store 4,158,925 B, remote primary store 4,158,925 B, MinIO repo 4,235,026 B.
 - Important correction: ISM `convert_index_to_remote` on OpenSearch/index-management 3.6.0.0 failed only because `plugins.index_state_management.action_validation.enabled=true` runs `ValidateConvertIndexToRemote`, whose bytecode checks `indexExists(indexName)` against the source managed index before restore. Bootstrap now sets action validation to false so the native restore step can run.
+- Root disk usage around 287 GB after cluster cleanup is mostly raw dump files, not OpenSearch: `/events_*.data.json` is 280,348,926,756 bytes and `/var/lib/docker` was about 11 GB after cleanup/rebuild.
+- Faster replay path added: `scripts/fast-elasticdump-replay.py` streams elasticdump hit lines to OpenSearch `_bulk`, pre-creates `events_yyyy_MM_dd` with `index.creation_date` from the index name, and avoids the throttled .NET producer path. `run-real-retention-managed-ingest.sh` defaults to `INGEST_MODE=bulk`.
 
 Important user constraint:
 

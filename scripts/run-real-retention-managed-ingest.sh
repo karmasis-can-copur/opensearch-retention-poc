@@ -6,6 +6,9 @@ to_date="${2:-2025-12-31}"
 events_per_second="${3:-5000}"
 dump_dir="${DUMP_DIR:-/}"
 index_prefix="${INDEX_PREFIX:-events}"
+ingest_mode="${INGEST_MODE:-bulk}"
+bulk_workers="${BULK_WORKERS:-6}"
+bulk_batch_docs="${BULK_BATCH_DOCS:-5000}"
 hot_days="${HOT_DAYS:-10}"
 cold_days="${COLD_DAYS:-10}"
 stage_timeout_seconds="${STAGE_TIMEOUT_SECONDS:-7200}"
@@ -112,7 +115,9 @@ if [[ ! -f "$metrics_file" ]]; then
   echo "date,index,expected_stage,raw_bytes,hot_docs,hot_store_bytes,final_index,final_stage,final_docs,final_store_bytes,minio_bytes,root_free_bytes,data_free_bytes" > "$metrics_file"
 fi
 
-"${compose[@]}" build event-producer
+if [[ "$ingest_mode" == "producer" ]]; then
+  "${compose[@]}" build event-producer
+fi
 
 current="$from_date"
 while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
@@ -129,7 +134,15 @@ while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
   echo "=== $current / $index / expected=$expected_stage ==="
   check_disk
   "${compose[@]}" stop ism-policy-reconciler >/dev/null
-  BUILD_EVENT_PRODUCER=false ./scripts/remote-run-dump-replay.sh "$file" "$events_per_second" 0 "$index_prefix"
+  if [[ "$ingest_mode" == "bulk" ]]; then
+    python3 ./scripts/fast-elasticdump-replay.py "$file" "$index" \
+      --url "$base_url" \
+      --workers "$bulk_workers" \
+      --batch-docs "$bulk_batch_docs" \
+      --refresh
+  else
+    BUILD_EVENT_PRODUCER=false ./scripts/remote-run-dump-replay.sh "$file" "$events_per_second" 0 "$index_prefix"
+  fi
   curl -fsS -X POST "$base_url/$index/_refresh" >/dev/null
   IFS=',' read -r hot_docs hot_store_bytes < <(index_stats "$index")
   raw_bytes="$(stat -c '%s' "$file")"

@@ -90,7 +90,7 @@ dataskope-minio       ...
 For historical data, use the managed replay. It writes one daily file, starts lifecycle, waits for the expected retention stage, then moves to the next day:
 
 ```bash
-./scripts/run-real-retention-managed-ingest.sh 2025-12-01 2025-12-31 5000
+INGEST_MODE=bulk BULK_WORKERS=6 BULK_BATCH_DOCS=5000 ./scripts/run-real-retention-managed-ingest.sh 2025-12-01 2025-12-31 5000
 ./scripts/poc-status.sh
 ./scripts/summarize-retention-metrics.sh artifacts/resource-metrics/<metrics-file>.csv
 ```

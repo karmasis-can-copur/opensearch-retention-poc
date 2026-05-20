@@ -96,7 +96,7 @@
         "index_patterns": [
           "events_*"
         ],
-        "priority": 200
+        "priority": 300
       }
     ]
   }

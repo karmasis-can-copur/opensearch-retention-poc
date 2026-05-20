@@ -1,0 +1,70 @@
+{
+  "policy": {
+    "description": "Dataskope hot + searchable snapshot PoC for OpenSearch 3.4+. Writer sets index.creation_date from the daily index name; ISM uses one policy with min_index_age.",
+    "schema_version": 7,
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {
+            "index_priority": {
+              "priority": 100
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "snapshot_ready",
+            "conditions": {
+              "min_index_age": "10d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "snapshot_ready",
+        "actions": [
+          {
+            "read_only": {}
+          },
+          {
+            "force_merge": {
+              "max_num_segments": 1
+            },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          },
+          {
+            "snapshot": {
+              "repository": "dataskope_lifecycle_repo",
+              "snapshot": "{{ctx.index}}"
+            },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          },
+          {
+            "convert_index_to_remote": {
+              "repository": "dataskope_lifecycle_repo",
+              "snapshot": "{{ctx.index}}",
+              "rename_pattern": "remote_$1"
+            }
+          }
+        ],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {
+        "index_patterns": [
+          "events_*"
+        ],
+        "priority": 200
+      }
+    ]
+  }
+}

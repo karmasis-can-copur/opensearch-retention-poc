@@ -1,0 +1,103 @@
+{
+  "policy": {
+    "description": "Dataskope 1d hot + 1d cold + searchable snapshot PoC. Daily indexes are created with index.creation_date set from the index name; unmanaged old-date indexes are attached by the lifecycle reconcile script, not by the writer.",
+    "schema_version": 7,
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {
+            "index_priority": {
+              "priority": 100
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "cold",
+            "conditions": {
+              "min_index_age": "1d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cold",
+        "actions": [
+          {
+            "read_only": {}
+          },
+          {
+            "force_merge": {
+              "max_num_segments": 1
+            },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          },
+          {
+            "allocation": {
+              "require": {
+                "temp": "cold"
+              }
+            },
+            "retry": {
+              "count": 5,
+              "delay": "1m"
+            }
+          },
+          {
+            "index_priority": {
+              "priority": 50
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "state_name": "snapshot_ready",
+            "conditions": {
+              "min_index_age": "2d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "snapshot_ready",
+        "actions": [
+          {
+            "snapshot": {
+              "repository": "dataskope_lifecycle_repo",
+              "snapshot": "{{ctx.index}}"
+            },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          },
+          {
+            "convert_index_to_remote": {
+              "repository": "dataskope_lifecycle_repo",
+              "snapshot": "{{ctx.index}}",
+              "rename_pattern": "remote_$1"
+            },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          }
+        ],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {
+        "index_patterns": [
+          "events_*"
+        ],
+        "priority": 200
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+services:
+  opensearch-hot:
+    environment:
+      discovery.seed_hosts: "opensearch-hot,opensearch-search"
+      cluster.initial_cluster_manager_nodes: "opensearch-hot"
+
+  opensearch-search:
+    environment:
+      discovery.seed_hosts: "opensearch-hot,opensearch-search"
+      cluster.initial_cluster_manager_nodes: "opensearch-hot"
+

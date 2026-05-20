@@ -1,0 +1,103 @@
+PUT /_template/events_template
+{
+      "template": "events_*",
+
+      "settings": {},
+
+      "mappings": {
+
+         "_default_": {
+
+            "numeric_detection": false,
+
+            "dynamic_templates": [
+
+               {
+
+                  "strings": {
+
+                     "mapping": {
+
+                        "norms": false,
+
+                        "fields": {
+
+                           "raw": {
+
+                              "type": "keyword",
+
+                              "ignore_above":"250"
+
+                           }
+
+                        },
+
+                        "type": "text"
+
+                     },
+
+                     "match_mapping_type": "string",
+
+                     "match": "*"
+
+                  }
+
+               }
+
+            ],
+
+            "_all": {
+
+               "enabled": false
+
+            },
+
+            "date_detection": false,
+
+            "properties": {
+
+               "TimeCreated": {
+
+                  "type": "date"
+
+               },
+
+               "TimeInserted": {
+
+                  "type": "date"
+
+               },
+
+               "EventID": {
+
+                  "type": "float"
+
+               },
+
+               "Level": {
+
+                  "type": "float"
+
+               },
+
+               "Severity": {
+
+                  "type": "float"
+
+               },
+
+               "DataLabel": {
+
+                  "type": "float"
+
+               }
+
+            }
+
+         }
+
+      }
+
+}
+
+ 

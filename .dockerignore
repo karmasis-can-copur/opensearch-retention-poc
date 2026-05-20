@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.git/
+.vs/
+.appdata/
+.dotnet-home/
+.nuget-packages/
+.tools/
+artifacts/
+samples/loadtest-*.ndjson
+samples/retention-day.ndjson
+*.data.json
+*.data.json.done

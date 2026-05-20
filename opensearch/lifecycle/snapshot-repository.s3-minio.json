@@ -1,0 +1,11 @@
+{
+  "type": "s3",
+  "settings": {
+    "bucket": "dataskope-opensearch-snapshots",
+    "base_path": "opensearch-retention-poc",
+    "endpoint": "minio:9000",
+    "protocol": "http",
+    "path_style_access": true,
+    "disable_chunked_encoding": true
+  }
+}

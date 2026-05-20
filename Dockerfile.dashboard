@@ -1,0 +1,16 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY OpenSearchEventProducer.sln ./
+COPY OpenSearchRetentionDashboard/OpenSearchRetentionDashboard.csproj OpenSearchRetentionDashboard/
+RUN dotnet restore OpenSearchRetentionDashboard/OpenSearchRetentionDashboard.csproj
+
+COPY OpenSearchRetentionDashboard/ OpenSearchRetentionDashboard/
+RUN dotnet publish OpenSearchRetentionDashboard/OpenSearchRetentionDashboard.csproj -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+COPY --from=build /app/publish .
+
+ENTRYPOINT ["dotnet", "OpenSearchRetentionDashboard.dll"]

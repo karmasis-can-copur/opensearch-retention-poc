@@ -1,0 +1,243 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: dataskope-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-dataskope}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-dataskope-minio-change-me}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - "${MINIO_DATA_DIR:-/data/minio}:/data"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: dataskope-minio-init
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb -p local/"$$MINIO_BUCKET" || true
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-dataskope}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-dataskope-minio-change-me}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-dataskope-opensearch-snapshots}"
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  opensearch-snapshot-init:
+    image: busybox:1.36
+    container_name: opensearch-snapshot-init
+    command: ["sh", "-c", "mkdir -p /mnt/snapshots && chown -R 1000:1000 /mnt/snapshots"]
+    volumes:
+      - opensearch-snapshots:/mnt/snapshots
+
+  event-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opensearch-event-producer
+    restart: unless-stopped
+    environment:
+      OpenSearchSettings__Url: "http://opensearch-hot:9200"
+      OpenSearchSettings__Username: "admin"
+      OpenSearchSettings__Password: "Admin123!"
+      OpenSearchSettings__IndexPrefix: "events"
+      Producer__Enabled: "true"
+      Producer__EventsPerSecond: "50"
+      Producer__BatchSize: "250"
+      Producer__TemplateFilePath: "/data/events.ndjson"
+      Producer__DryRun: "false"
+      Producer__PreserveDateFields: "true"
+      Producer__ReplayInputFile: "false"
+      Producer__DropEventsOutsideHotWindow: "true"
+      Producer__HotWindowDays: "30"
+      Producer__RejectedEventsDumpFilePath: "/rejected/rejected-events.ndjson"
+    volumes:
+      - "${HOST_EVENTS_FILE:?Set HOST_EVENTS_FILE to your NDJSON file path}:/data/events.ndjson:ro"
+      - "${HOST_REJECTED_EVENTS_DIR:-./artifacts/rejected-events}:/rejected"
+    depends_on:
+      opensearch-hot:
+        condition: service_healthy
+
+  retention-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: opensearch-retention-dashboard
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: "http://0.0.0.0:9205"
+      OpenSearch__Url: "http://opensearch-hot:9200"
+      OpenSearch__IndexPattern: "events_*,remote_events_*"
+      OpenSearch__SnapshotRepository: "dataskope_lifecycle_repo"
+    ports:
+      - "9205:9205"
+    depends_on:
+      opensearch-hot:
+        condition: service_healthy
+
+  ism-policy-reconciler:
+    image: curlimages/curl:8.10.1
+    container_name: opensearch-ism-policy-reconciler
+    entrypoint: ["sh"]
+    command: ["/scripts/reconcile-ism-policy.sh"]
+    restart: unless-stopped
+    environment:
+      OPENSEARCH_URL: "http://opensearch-hot:9200"
+      ISM_POLICY_ID: "${ISM_RECONCILE_POLICY_ID:-events-hot-cold-snapshot-10-10}"
+      INDEX_PREFIX: "${ISM_RECONCILE_INDEX_PREFIX:-events}"
+      ISM_RECONCILE_INTERVAL_SECONDS: "${ISM_RECONCILE_INTERVAL_SECONDS:-60}"
+    volumes:
+      - "./scripts/reconcile-ism-policy.sh:/scripts/reconcile-ism-policy.sh:ro"
+    depends_on:
+      opensearch-hot:
+        condition: service_healthy
+
+  opensearch-hot:
+    build:
+      context: .
+      dockerfile: docker/opensearch-s3/Dockerfile
+    image: dataskope-opensearch-s3:3.6.0
+    container_name: opensearch-hot
+    environment:
+      cluster.name: "dataskope-lifecycle"
+      node.name: "opensearch-hot"
+      node.roles: "cluster_manager,data,ingest"
+      node.attr.temp: "hot"
+      discovery.seed_hosts: "opensearch-hot,opensearch-cold,opensearch-search"
+      cluster.initial_cluster_manager_nodes: "opensearch-hot"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "Admin123!"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms768m -Xmx768m"
+      S3_CLIENT_DEFAULT_ACCESS_KEY: "${MINIO_ROOT_USER:-dataskope}"
+      S3_CLIENT_DEFAULT_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-dataskope-minio-change-me}"
+      bootstrap.memory_lock: "true"
+      path.repo: "/mnt/snapshots"
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch-hot-data:/usr/share/opensearch/data
+      - opensearch-snapshots:/mnt/snapshots
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      opensearch-snapshot-init:
+        condition: service_completed_successfully
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  opensearch-cold:
+    build:
+      context: .
+      dockerfile: docker/opensearch-s3/Dockerfile
+    image: dataskope-opensearch-s3:3.6.0
+    container_name: opensearch-cold
+    environment:
+      cluster.name: "dataskope-lifecycle"
+      node.name: "opensearch-cold"
+      node.roles: "data"
+      node.attr.temp: "cold"
+      discovery.seed_hosts: "opensearch-hot,opensearch-cold,opensearch-search"
+      cluster.initial_cluster_manager_nodes: "opensearch-hot"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "Admin123!"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms768m -Xmx768m"
+      S3_CLIENT_DEFAULT_ACCESS_KEY: "${MINIO_ROOT_USER:-dataskope}"
+      S3_CLIENT_DEFAULT_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-dataskope-minio-change-me}"
+      bootstrap.memory_lock: "true"
+      path.repo: "/mnt/snapshots"
+    volumes:
+      - opensearch-cold-data:/usr/share/opensearch/data
+      - opensearch-snapshots:/mnt/snapshots
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      opensearch-snapshot-init:
+        condition: service_completed_successfully
+      opensearch-hot:
+        condition: service_healthy
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  opensearch-search:
+    build:
+      context: .
+      dockerfile: docker/opensearch-s3/Dockerfile
+    image: dataskope-opensearch-s3:3.6.0
+    container_name: opensearch-search
+    environment:
+      cluster.name: "dataskope-lifecycle"
+      node.name: "opensearch-search"
+      node.roles: "warm"
+      node.attr.temp: "frozen"
+      node.search.cache.size: "1gb"
+      discovery.seed_hosts: "opensearch-hot,opensearch-cold,opensearch-search"
+      cluster.initial_cluster_manager_nodes: "opensearch-hot"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "Admin123!"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      S3_CLIENT_DEFAULT_ACCESS_KEY: "${MINIO_ROOT_USER:-dataskope}"
+      S3_CLIENT_DEFAULT_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-dataskope-minio-change-me}"
+      bootstrap.memory_lock: "true"
+      path.repo: "/mnt/snapshots"
+    volumes:
+      - opensearch-search-data:/usr/share/opensearch/data
+      - opensearch-snapshots:/mnt/snapshots
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      opensearch-snapshot-init:
+        condition: service_completed_successfully
+      opensearch-hot:
+        condition: service_healthy
+      opensearch-cold:
+        condition: service_healthy
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.6.0
+    container_name: opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch-hot:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    depends_on:
+      opensearch-hot:
+        condition: service_healthy
+
+volumes:
+  opensearch-hot-data:
+  opensearch-cold-data:
+  opensearch-search-data:
+  opensearch-snapshots:

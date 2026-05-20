@@ -1,0 +1,5 @@
+services:
+  event-producer:
+    environment:
+      Producer__DryRun: "false"
+      Producer__EventsPerSecond: "400"

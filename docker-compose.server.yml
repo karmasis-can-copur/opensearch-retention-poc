@@ -1,0 +1,33 @@
+services:
+  event-producer:
+    environment:
+      OpenSearchSettings__BulkChunkSize: "1000"
+      OpenSearchSettings__BulkMaxConcurrency: "16"
+      OpenSearchSettings__RequestTimeoutSeconds: "300"
+      OpenSearchSettings__MaxRetryTimeoutSeconds: "300"
+
+  opensearch-hot:
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms24g -Xmx24g"
+      indices.memory.index_buffer_size: "30%"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  opensearch-cold:
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms16g -Xmx16g"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  opensearch-search:
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms8g -Xmx8g"
+      node.search.cache.size: "16gb"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535

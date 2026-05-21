@@ -9,15 +9,11 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml up -d --build 
 
 ## Bootstrap Repository, Template, and ISM
 
-```powershell
-.\scripts\bootstrap-lifecycle.ps1 `
-  -BaseUrl http://localhost:9200 `
-  -PolicyId events-hot-cold-snapshot-10-10 `
-  -PolicyFile .\opensearch\lifecycle\dataskope-ism-policy.hot-cold-snapshot-10-10.poc.json `
-  -RepositoryFile .\opensearch\lifecycle\snapshot-repository.s3-minio.json `
-  -IndexTemplateFile .\opensearch\lifecycle\dataskope-index-template.loadtest.json `
-  -ExpectedNodes 3
+```bash
+./scripts/bootstrap-lifecycle.sh
 ```
+
+Real Dataskope Sysmon data needs the current template setting `index.mapping.total_fields.limit=5000`. Without it, Dec08 real dump data hit OpenSearch's default `1000` field limit.
 
 ## Verify MinIO/S3 Repository
 
@@ -26,24 +22,24 @@ curl -s http://localhost:9200/_snapshot/dataskope_lifecycle_repo
 curl -s -XPOST http://localhost:9200/_snapshot/dataskope_lifecycle_repo/_verify
 ```
 
-## Lifecycle Operations
+## Lifecycle Status
 
-```powershell
-.\scripts\lifecycle-list.ps1 -BaseUrl http://localhost:9200
-.\scripts\lifecycle-explain.ps1 -BaseUrl http://localhost:9200 -ShowPolicy -ValidateAction
-.\scripts\reconcile-ism-policy.ps1 -BaseUrl http://localhost:9200 -PolicyId events-hot-cold-snapshot-10-10
+```bash
+./scripts/poc-status.sh
+curl -s http://localhost:9200/_plugins/_ism/explain/events_2025_12_01
+curl -s "http://localhost:9200/_cat/indices/events_*,remote_events_*?v&s=index"
 ```
 
 Retry a failed managed index:
 
-```powershell
-.\scripts\lifecycle-retry.ps1 -BaseUrl http://localhost:9200 -IndexName events_2026_01_01
+```bash
+curl -s -XPOST "http://localhost:9200/_plugins/_ism/retry/events_2025_12_01"
 ```
 
 Remove a policy from a source index:
 
-```powershell
-.\scripts\lifecycle-remove-policy.ps1 -BaseUrl http://localhost:9200 -IndexName events_2026_01_01
+```bash
+curl -s -XPOST "http://localhost:9200/_plugins/_ism/remove/events_2025_12_01"
 ```
 
 ## Real Dump Preflight
@@ -68,24 +64,19 @@ Smoke:
 BUILD_EVENT_PRODUCER=false ./scripts/remote-run-dump-replay.sh /events_2025_12_01.data.json 5000 100000 events
 ```
 
-Full range:
+Managed retention replay:
 
 ```bash
-BUILD_EVENT_PRODUCER=false ./scripts/run-real-retention-ingest.sh 2025-12-01 2026-01-30 5000
+ISM_POLICY_ID=events-window-3-3-3 INGEST_MODE=bulk BULK_WORKERS=6 BULK_BATCH_DOCS=5000 HOT_AFTER_DAYS=<printed> SNAPSHOT_AFTER_DAYS=<printed> ./scripts/run-real-retention-managed-ingest.sh 2025-12-01 2025-12-09 5000
 ```
 
 ## Measurements
 
-Retention layout:
-
-```powershell
-.\scripts\measure-retention-layout.ps1 -BaseUrl http://localhost:9200 -IndexPattern 'events_*,remote_events_*'
-```
-
-Single stage:
-
-```powershell
-.\scripts\measure-index-stage.ps1 -BaseUrl http://localhost:9200 -Stage hot -IndexName events_2026_01_30 -IncludeDocker
+```bash
+./scripts/poc-status.sh
+./scripts/summarize-retention-metrics.sh artifacts/resource-metrics/<metrics-file>.csv
+curl -s "http://localhost:9200/_cat/nodes?v&h=name,node.role,heap.percent,ram.percent,cpu,disk.used,disk.avail,disk.percent"
+curl -s "http://localhost:9200/_cat/indices/events_*,remote_events_*?v&s=index"
 ```
 
 ## Safe Search Examples

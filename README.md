@@ -20,7 +20,7 @@ Current real-data target:
 - `OpenSearchEventProducer`: .NET 10 writer/replay tool. It can generate test events or stream elasticdump output without loading the whole file into memory.
 - `OpenSearchRetentionDashboard`: .NET 10 dashboard for cluster health, retention stages, safe search, and EPS capacity calculation.
 - `opensearch/lifecycle`: Dataskope index templates, ISM policies, and snapshot repository definitions.
-- `scripts`: bootstrap, ISM management, real dump preflight/replay, searchable snapshot, and measurement helpers.
+- `scripts`: bash-based bootstrap, status, real dump preflight/replay, lifecycle window policy, and metric summary helpers.
 - `docs`: architecture, search guidance, cheat sheet, and measured PoC reports.
 
 ## Quick Start
@@ -76,10 +76,11 @@ If the preflight storage estimate is acceptable, run a smoke replay:
 BUILD_EVENT_PRODUCER=false ./scripts/remote-run-dump-replay.sh /events_2025_12_01.data.json 5000 100000 events
 ```
 
-Then run the full date range:
+Then run the managed retention replay. This is the preferred path for historical dump tests because it writes one day, waits until that index reaches the expected lifecycle stage, records metrics, and only then continues:
 
 ```bash
-BUILD_EVENT_PRODUCER=false ./scripts/run-real-retention-ingest.sh 2025-12-01 2026-01-30 5000
+INGEST_MODE=bulk BULK_WORKERS=6 BULK_BATCH_DOCS=5000 ./scripts/run-real-retention-managed-ingest.sh 2025-12-01 2025-12-09 5000
+./scripts/summarize-retention-metrics.sh artifacts/resource-metrics/<metrics-file>.csv
 ```
 
 The replay mode streams elasticdump lines, extracts `_source`, routes by `TimeCreated`, and creates `events_yyyy_MM_dd` with `index.creation_date` set from the index name. The writer does not attach ISM policies; the lifecycle reconciler handles unmanaged backdated indexes.
@@ -89,10 +90,10 @@ The replay mode streams elasticdump lines, extracts `_source`, routes by `TimeCr
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Dev Team Lead Demo Runbook](docs/team-lead-demo.md)
 - [Real Dump Smoke 2026-05-20](docs/real-dump-smoke-2026-05-20.md)
+- [Real Dump Window 2026-05-21](docs/real-dump-window-3-3-3-2026-05-21.md)
 - [Architecture Comparison](docs/architecture-comparison.md)
 - [Search Guidelines](docs/search-guidelines.md)
 - [Cluster Calculator](docs/calculator.md)
-- [Resource Measurement Plan](docs/resource-measurement-plan.md)
 
 ## GitHub Hygiene
 

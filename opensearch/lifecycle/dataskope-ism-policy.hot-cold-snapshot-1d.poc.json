@@ -15,6 +15,12 @@
         ],
         "transitions": [
           {
+            "state_name": "snapshot_ready",
+            "conditions": {
+              "min_index_age": "2d"
+            }
+          },
+          {
             "state_name": "cold",
             "conditions": {
               "min_index_age": "1d"
@@ -67,6 +73,29 @@
         "name": "snapshot_ready",
         "actions": [
           {
+            "read_only": {}
+          },
+          {
+            "force_merge": {
+              "max_num_segments": 1
+            },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          },
+          {
+            "allocation": {
+              "require": {
+                "temp": "frozen"
+              }
+            },
+            "retry": {
+              "count": 5,
+              "delay": "1m"
+            }
+          },
+          {
             "snapshot": {
               "repository": "dataskope_lifecycle_repo",
               "snapshot": "{{ctx.index}}"
@@ -82,6 +111,13 @@
               "snapshot": "{{ctx.index}}",
               "rename_pattern": "remote_$1"
             },
+            "retry": {
+              "count": 3,
+              "delay": "1m"
+            }
+          },
+          {
+            "delete": {},
             "retry": {
               "count": 3,
               "delay": "1m"

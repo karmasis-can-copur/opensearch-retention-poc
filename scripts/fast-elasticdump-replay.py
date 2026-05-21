@@ -2,12 +2,16 @@
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 import time
 import urllib.error
 import urllib.request
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+
+TRANSIENT_BULK_STATUSES = {408, 429, 500, 502, 503, 504}
 
 
 def request_json(method, url, body=None, timeout=300):
@@ -23,18 +27,94 @@ def request_json(method, url, body=None, timeout=300):
         return json.loads(payload.decode() or "{}") if payload else {}
 
 
-def post_bulk(url, payload, timeout):
-    req = urllib.request.Request(
-        f"{url}/_bulk?filter_path=errors,took",
-        data=payload,
-        method="POST",
-        headers={"content-type": "application/x-ndjson"},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        result = json.loads(response.read().decode() or "{}")
-    if result.get("errors"):
-        raise RuntimeError("Bulk request returned errors=true")
-    return int(result.get("took", 0))
+def split_bulk_payload(payload):
+    text = payload.decode()
+    if text.endswith("\n"):
+        text = text[:-1]
+    if not text:
+        return []
+    lines = text.split("\n")
+    if len(lines) % 2 != 0:
+        raise RuntimeError(f"Bulk payload has an odd NDJSON line count: {len(lines)}")
+    return [(lines[i], lines[i + 1]) for i in range(0, len(lines), 2)]
+
+
+def encode_bulk_pairs(pairs):
+    lines = []
+    for action, source in pairs:
+        lines.append(action)
+        lines.append(source)
+    return ("\n".join(lines) + "\n").encode()
+
+
+def append_failed_items(path, failed_items):
+    if not failed_items:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        for action, source, status, error in failed_items:
+            handle.write(json.dumps({
+                "status": status,
+                "error": error,
+                "action": json.loads(action),
+                "source": json.loads(source),
+            }, separators=(",", ":"), ensure_ascii=False))
+            handle.write("\n")
+
+
+def post_bulk(url, payload, timeout, max_retries, failed_output):
+    total_took = 0
+    attempt = 0
+    current_payload = payload
+
+    while True:
+        req = urllib.request.Request(
+            f"{url}/_bulk",
+            data=current_payload,
+            method="POST",
+            headers={"content-type": "application/x-ndjson"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            result = json.loads(response.read().decode() or "{}")
+
+        total_took += int(result.get("took", 0))
+        if not result.get("errors"):
+            return total_took, 0
+
+        pairs = split_bulk_payload(current_payload)
+        retry_pairs = []
+        permanent_failures = []
+
+        for offset, item in enumerate(result.get("items", [])):
+            op = item.get("index") or item.get("create") or item.get("update") or item.get("delete") or {}
+            error = op.get("error")
+            if not error:
+                continue
+
+            status = int(op.get("status", 0) or 0)
+            if offset >= len(pairs):
+                raise RuntimeError(
+                    f"Bulk response item offset {offset} is outside payload pair count {len(pairs)}"
+                )
+            action, source = pairs[offset]
+            if status in TRANSIENT_BULK_STATUSES and attempt < max_retries:
+                retry_pairs.append((action, source))
+            else:
+                permanent_failures.append((action, source, status, error))
+
+        append_failed_items(failed_output, permanent_failures)
+
+        if retry_pairs:
+            attempt += 1
+            time.sleep(min(2 ** attempt, 30))
+            current_payload = encode_bulk_pairs(retry_pairs)
+            continue
+
+        if permanent_failures:
+            print(f"bulk_permanent_errors={len(permanent_failures)} failed_output={failed_output}", flush=True)
+            return total_took, len(permanent_failures)
+
+        raise RuntimeError("Bulk request returned errors=true but no item errors were present in the response")
 
 
 def creation_date_from_index(index_name):
@@ -90,6 +170,8 @@ def main():
     parser.add_argument("--batch-docs", type=int, default=5000)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument("--max-retries", type=int, default=3)
+    parser.add_argument("--failed-output", default="artifacts/rejected-events/fast-elasticdump-replay-errors.ndjson")
     parser.add_argument("--refresh", action="store_true")
     args = parser.parse_args()
 
@@ -99,6 +181,7 @@ def main():
     started = time.monotonic()
     submitted_docs = 0
     completed_docs = 0
+    failed_docs = 0
     inflight = {}
     bulk_took_ms = 0
 
@@ -108,26 +191,30 @@ def main():
                 done, _ = wait(inflight, return_when=FIRST_COMPLETED)
                 for future in done:
                     docs_in_batch = inflight.pop(future)
-                    bulk_took_ms += future.result()
-                    completed_docs += docs_in_batch
+                    took, failed = future.result()
+                    bulk_took_ms += took
+                    failed_docs += failed
+                    completed_docs += docs_in_batch - failed
             docs_in_batch = upto_docs - submitted_docs
             submitted_docs = upto_docs
-            inflight[executor.submit(post_bulk, url, payload, args.timeout)] = docs_in_batch
+            inflight[executor.submit(post_bulk, url, payload, args.timeout, args.max_retries, args.failed_output)] = docs_in_batch
             if submitted_docs == docs_in_batch or submitted_docs % 100000 <= args.batch_docs:
                 elapsed = max(time.monotonic() - started, 0.001)
                 print(f"submitted={submitted_docs} completed={completed_docs} rate={completed_docs / elapsed:.0f} docs/s", flush=True)
 
         for future in list(inflight):
             docs_in_batch = inflight[future]
-            bulk_took_ms += future.result()
-            completed_docs += docs_in_batch
+            took, failed = future.result()
+            bulk_took_ms += took
+            failed_docs += failed
+            completed_docs += docs_in_batch - failed
 
     if args.refresh:
         request_json("POST", f"{url}/{args.index_name}/_refresh", timeout=args.timeout)
 
     elapsed = max(time.monotonic() - started, 0.001)
     print(
-        f"completed={completed_docs} elapsed_seconds={elapsed:.2f} rate={completed_docs / elapsed:.0f} docs/s bulk_took_ms={bulk_took_ms}",
+        f"completed={completed_docs} failed={failed_docs} elapsed_seconds={elapsed:.2f} rate={completed_docs / elapsed:.0f} docs/s bulk_took_ms={bulk_took_ms}",
         flush=True,
     )
 

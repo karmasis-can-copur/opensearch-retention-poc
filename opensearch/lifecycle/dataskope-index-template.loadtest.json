@@ -7,6 +7,8 @@
     "settings": {
       "index.number_of_shards": 6,
       "index.number_of_replicas": 0,
+      "index.codec": "best_compression",
+      "index.mapping.total_fields.limit": 5000,
       "index.refresh_interval": "5s",
       "index.routing.allocation.require.temp": "hot",
       "index.plugins.index_state_management.rollover_skip": true

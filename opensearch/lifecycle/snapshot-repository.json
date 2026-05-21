@@ -1,7 +1,0 @@
-{
-  "type": "fs",
-  "settings": {
-    "location": "/mnt/snapshots",
-    "compress": true
-  }
-}

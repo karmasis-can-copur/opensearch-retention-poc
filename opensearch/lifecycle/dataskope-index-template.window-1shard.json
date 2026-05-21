@@ -2,14 +2,14 @@
   "index_patterns": [
     "events_*"
   ],
-  "priority": 100,
+  "priority": 210,
   "template": {
     "settings": {
-      "index.number_of_shards": 3,
+      "index.number_of_shards": 1,
       "index.number_of_replicas": 0,
       "index.codec": "best_compression",
       "index.mapping.total_fields.limit": 5000,
-      "index.refresh_interval": "1s",
+      "index.refresh_interval": "5s",
       "index.routing.allocation.require.temp": "hot",
       "index.plugins.index_state_management.rollover_skip": true
     },
@@ -58,6 +58,6 @@
     }
   },
   "_meta": {
-    "source": "Converted from elasticsearch-template-for-dataskope.txt legacy _template/_default_ mapping. _all is omitted because it is not supported in OpenSearch 2.x."
+    "source": "Real-window PoC template. Same Dataskope mapping as loadtest template, but 1 primary shard for small 9-day comparison runs."
   }
 }

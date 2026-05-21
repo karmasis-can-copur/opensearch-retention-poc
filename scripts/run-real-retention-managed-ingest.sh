@@ -9,8 +9,12 @@ index_prefix="${INDEX_PREFIX:-events}"
 ingest_mode="${INGEST_MODE:-bulk}"
 bulk_workers="${BULK_WORKERS:-6}"
 bulk_batch_docs="${BULK_BATCH_DOCS:-5000}"
+failed_output="${FAILED_OUTPUT:-artifacts/rejected-events/fast-elasticdump-replay-errors.ndjson}"
 hot_days="${HOT_DAYS:-10}"
 cold_days="${COLD_DAYS:-10}"
+policy_id="${ISM_POLICY_ID:-${ISM_RECONCILE_POLICY_ID:-events-hot-cold-snapshot-10-10}}"
+hot_after_days="${HOT_AFTER_DAYS:-$hot_days}"
+snapshot_after_days="${SNAPSHOT_AFTER_DAYS:-$((hot_after_days + cold_days))}"
 stage_timeout_seconds="${STAGE_TIMEOUT_SECONDS:-7200}"
 min_root_free_bytes="${MIN_ROOT_FREE_BYTES:-10737418240}"
 min_data_free_bytes="${MIN_DATA_FREE_BYTES:-10737418240}"
@@ -61,9 +65,9 @@ stage_for_date() {
   day_epoch="$(date -u -d "$day" +%s)"
   now_epoch="$(date -u +%s)"
   age_days=$(( (now_epoch - day_epoch) / 86400 ))
-  if (( age_days < hot_days )); then
+  if (( age_days < hot_after_days )); then
     echo "hot"
-  elif (( age_days < hot_days + cold_days )); then
+  elif (( age_days < snapshot_after_days )); then
     echo "cold"
   else
     echo "searchable_snapshot"
@@ -119,6 +123,8 @@ if [[ "$ingest_mode" == "producer" ]]; then
   "${compose[@]}" build event-producer
 fi
 
+echo "stage_thresholds hot_after_days=$hot_after_days snapshot_after_days=$snapshot_after_days"
+
 current="$from_date"
 while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
   index="$(date -u -d "$current" +${index_prefix}_%Y_%m_%d)"
@@ -139,6 +145,7 @@ while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
       --url "$base_url" \
       --workers "$bulk_workers" \
       --batch-docs "$bulk_batch_docs" \
+      --failed-output "$failed_output" \
       --refresh
   else
     BUILD_EVENT_PRODUCER=false ./scripts/remote-run-dump-replay.sh "$file" "$events_per_second" 0 "$index_prefix"
@@ -147,7 +154,11 @@ while [[ "$current" < "$(date -u -d "$to_date + 1 day" +%F)" ]]; do
   IFS=',' read -r hot_docs hot_store_bytes < <(index_stats "$index")
   raw_bytes="$(stat -c '%s' "$file")"
   echo "hot_checkpoint index=$index docs=$hot_docs store_bytes=$hot_store_bytes raw_bytes=$raw_bytes"
-  "${compose[@]}" start ism-policy-reconciler >/dev/null
+  echo "attach_policy index=$index policy=$policy_id"
+  curl -fsS -XPOST "$base_url/_plugins/_ism/add/$index" \
+    -H "Content-Type: application/json" \
+    -d "{\"policy_id\":\"$policy_id\"}" >/dev/null || true
+  ISM_RECONCILE_POLICY_ID="$policy_id" "${compose[@]}" up -d --force-recreate ism-policy-reconciler >/dev/null
   wait_for_stage "$index" "$expected_stage"
   final_index="$index"
   if [[ "$expected_stage" == "searchable_snapshot" ]]; then

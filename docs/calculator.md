@@ -44,7 +44,7 @@ The calculator returns:
 
 1. Run `scripts/preflight-real-dump.sh` for raw size.
 2. Load a representative subset.
-3. Run `scripts/measure-retention-layout.ps1`.
+3. Run `scripts/run-real-retention-managed-ingest.sh` and summarize the generated CSV with `scripts/summarize-retention-metrics.sh`.
 4. Replace calculator coefficients with measured values.
 5. Recalculate the production EPS and retention target.
 

@@ -107,3 +107,4 @@ Resolution:
 - Set `plugins.index_state_management.action_validation.enabled=false` in the PoC bootstrap.
 - Reason: OpenSearch/index-management `3.6.0.0` validates `convert_index_to_remote` against the source managed index name before restore, so validation incorrectly fails while the source index still exists.
 - The actual restore step uses native snapshot restore with `storage_type=remote_snapshot`, fixed rename pattern `^(.*)$`, and the action's `rename_pattern` as the restore replacement. Manual restore already proved this path works with MinIO.
+- Follow-up real dump run showed two more 3.6.0 constraints: `convert_index_to_remote` rejects `ignore_index_settings` / `number_of_replicas`, and it did not delete the source automatically. Current policy sets source allocation to `temp=frozen` before convert and adds an explicit `delete` action after convert. See `docs/real-dump-window-3-3-3-2026-05-20.md`.

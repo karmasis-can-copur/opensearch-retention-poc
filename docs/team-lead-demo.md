@@ -98,7 +98,7 @@ INGEST_MODE=bulk BULK_WORKERS=6 BULK_BATCH_DOCS=5000 ./scripts/run-real-retentio
 For a small, explainable December demo with real index dates and `3 hot + 3 cold + 3 searchable snapshot`, generate a window policy first:
 
 ```bash
-python3 scripts/make-window-policy.py --from-date 2025-12-01 --to-date 2025-12-09 --hot-days 3 --cold-days 3 --out opensearch/lifecycle/dataskope-ism-policy.window.poc.json
+python3 scripts/make-window-policy.py --from-date 2025-12-01 --to-date 2025-12-09 --hot-days 3 --cold-days 3 --force-merge none --out opensearch/lifecycle/dataskope-ism-policy.window.poc.json
 
 ISM_POLICY_ID=events-window-3-3-3 ISM_POLICY_FILE=opensearch/lifecycle/dataskope-ism-policy.window.poc.json ./scripts/bootstrap-lifecycle.sh
 
@@ -108,6 +108,8 @@ ISM_POLICY_ID=events-window-3-3-3 INGEST_MODE=bulk BULK_WORKERS=6 BULK_BATCH_DOC
 Use the fresh `HOT_AFTER_DAYS` and `SNAPSHOT_AFTER_DAYS` printed by `make-window-policy.py`; they depend on the current date because this is a historical-window PoC.
 
 Known good 2026-05-21 result: 9 days, 99,862,203 docs, 180.50 GiB raw, 46.76 GiB all-hot logical store, 40.51 GiB final logical store, 12.64 GiB MinIO snapshot repository. Evidence: `docs/real-dump-window-3-3-3-2026-05-21.md`.
+
+Force-merge conclusion: keep it product-configurable. The final recommendation is default `--force-merge none`, then enable `cold`, `snapshot`, or `both` only when segment/query/snapshot evidence justifies it. See `docs/final-retention-report-2026-05-22.md`.
 
 Dashboard:
 
@@ -130,7 +132,8 @@ Show these screens:
 - MinIO represents the production S3-compatible snapshot repository.
 - Curator archive/restore logic is replaced by ISM policy plus snapshot repository.
 - Hot data is fully local and fastest.
-- Cold data is local, read-only, force-merged, and searchable.
+- Cold data is local, read-only, searchable, and can be force-merged when product config enables it.
+- Force-merge is optional; measured disk gain was small while transition time and transient disk cost were high.
 - Searchable snapshot data is stored mainly in MinIO and remains searchable with a local cache.
 - Real Dataskope Sysmon data needs `index.mapping.total_fields.limit=5000`; the default `1000` rejected valid events on Dec08.
 

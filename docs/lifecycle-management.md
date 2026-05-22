@@ -13,7 +13,7 @@ snapshot_ready -> MinIO/S3 snapshot -> remote_events_yyyy_MM_dd searchable snaps
 Aktif retention modeli:
 
 - Hot: yazilabilir, local full copy, aktif search.
-- Cold: read-only, force-merged, local full copy, daha dusuk oncelikli search.
+- Cold: read-only local full copy, daha dusuk oncelikli search; force-merge product config ile opsiyonel.
 - Searchable snapshot: MinIO/S3 repository uzerinden `remote_snapshot`, search node local cache/metadata tutar.
 
 ## Index Tarihi
@@ -42,7 +42,7 @@ Writer ISM policy bilmez. Writer sorumlulugu:
 - `scripts/bootstrap-lifecycle.sh`: repository, ISM policy ve index template uygular.
 - `scripts/poc-status.sh`: cluster, node, index/stage durumunu basit gosterir.
 - `scripts/preflight-real-dump.sh`: dump dosyasi ve storage on kontrolu.
-- `scripts/make-window-policy.py`: tarih penceresi icin native `min_index_age` threshold policy uretir.
+- `scripts/make-window-policy.py`: tarih penceresi icin native `min_index_age` threshold policy uretir; `--force-merge none|cold|snapshot|both` ile force-merge opsiyonunu policy'ye yazar.
 - `scripts/run-real-retention-managed-ingest.sh`: gun gun ingest eder, beklenen stage'e kadar bekler, CSV metrik yazar.
 - `scripts/summarize-retention-metrics.sh`: CSV'den sade ozet cikarir.
 
@@ -59,7 +59,7 @@ Gercek dump icin:
 
 ```bash
 ./scripts/preflight-real-dump.sh 2025-12-01 2025-12-09
-python3 scripts/make-window-policy.py --from-date 2025-12-01 --to-date 2025-12-09 --hot-days 3 --cold-days 3 --out opensearch/lifecycle/dataskope-ism-policy.window.poc.json
+python3 scripts/make-window-policy.py --from-date 2025-12-01 --to-date 2025-12-09 --hot-days 3 --cold-days 3 --force-merge none --out opensearch/lifecycle/dataskope-ism-policy.window.poc.json
 ISM_POLICY_ID=events-window-3-3-3 ISM_POLICY_FILE=opensearch/lifecycle/dataskope-ism-policy.window.poc.json INDEX_TEMPLATE_FILE=opensearch/lifecycle/dataskope-index-template.window-1shard.json ./scripts/bootstrap-lifecycle.sh
 ISM_POLICY_ID=events-window-3-3-3 INGEST_MODE=bulk BULK_WORKERS=6 BULK_BATCH_DOCS=5000 HOT_AFTER_DAYS=<printed> SNAPSHOT_AFTER_DAYS=<printed> ./scripts/run-real-retention-managed-ingest.sh 2025-12-01 2025-12-09 5000
 ./scripts/summarize-retention-metrics.sh artifacts/resource-metrics/<metrics-file>.csv
@@ -74,13 +74,13 @@ Policy sade native akisi kullanir:
 ```text
 hot -> cold:
   read_only
-  force_merge max_num_segments=1
+  force_merge max_num_segments=1 (optional)
   allocation require temp=cold
   index_priority 50
 
 cold/hot -> snapshot_ready:
   read_only
-  force_merge max_num_segments=1
+  force_merge max_num_segments=1 (optional)
   allocation require temp=frozen
   snapshot to dataskope_lifecycle_repo
   convert_index_to_remote as remote_$1
@@ -90,7 +90,7 @@ cold/hot -> snapshot_ready:
 Adim sureleri metrik dosyasinda ve logda izlenir:
 
 - `read_only`: genelde saniyeler.
-- `force_merge`: ana maliyet; veri ve segment sayisina gore dakika/saat olabilir.
+- `force_merge`: optional ana maliyet; veri ve segment sayisina gore dakika/saat olabilir. 2025-12-01..09 run'inda disk kazanci kucuk, sure ve gecici disk maliyeti yuksek goruldu.
 - `allocation`: shard boyutu, network ve disk throughput'a bagli.
 - `snapshot`: MinIO/S3 repository throughput'a bagli.
 - `convert_index_to_remote`: genelde hizli; ilk sorgular cache doldurabilir.

@@ -69,7 +69,24 @@ def normalize_remote_conversion(policy):
                 convert.pop(unsupported, None)
 
 
-def build_window_policy(base_policy, from_day, to_day, hot_days, cold_days, now):
+def configure_force_merge(policy, mode):
+    keep_by_state = {
+        "both": {"cold", "snapshot_ready"},
+        "cold": {"cold"},
+        "snapshot": {"snapshot_ready"},
+        "none": set(),
+    }[mode]
+
+    for state in policy["policy"]["states"]:
+        state_name = state.get("name")
+        state["actions"] = [
+            action
+            for action in state.get("actions", [])
+            if "force_merge" not in action or state_name in keep_by_state
+        ]
+
+
+def build_window_policy(base_policy, from_day, to_day, hot_days, cold_days, now, force_merge_mode):
     total_days = day_count(from_day, to_day)
     if total_days <= hot_days + cold_days:
         raise ValueError("Date window must contain at least one searchable-snapshot day.")
@@ -87,10 +104,12 @@ def build_window_policy(base_policy, from_day, to_day, hot_days, cold_days, now)
     set_hot_transitions(policy, hot_after, snapshot_after)
     replace_transition(policy, "cold", "snapshot_ready", snapshot_after)
     normalize_remote_conversion(policy)
+    configure_force_merge(policy, force_merge_mode)
     policy["policy"]["description"] = (
         "Dataskope windowed real-data retention PoC: "
         f"{from_day}..{to_day}, last {hot_days}d hot, previous {cold_days}d cold, "
-        "older days searchable snapshot. Thresholds are calculated from index.creation_date."
+        "older days searchable snapshot. Thresholds are calculated from index.creation_date. "
+        f"force_merge={force_merge_mode}."
     )
 
     return policy, {
@@ -102,6 +121,7 @@ def build_window_policy(base_policy, from_day, to_day, hot_days, cold_days, now)
         "hot_after_days": hot_after,
         "snapshot_after_days": snapshot_after,
         "cold_age_window_days": snapshot_after - hot_after,
+        "force_merge": force_merge_mode,
     }
 
 
@@ -122,6 +142,12 @@ def main():
         default="opensearch/lifecycle/dataskope-ism-policy.window.poc.json",
     )
     parser.add_argument("--now-utc", help="Override current UTC time for repeatable tests.")
+    parser.add_argument(
+        "--force-merge",
+        choices=["both", "cold", "snapshot", "none"],
+        default="none",
+        help="Keep force_merge actions in both stages, cold only, snapshot_ready only, or neither.",
+    )
     args = parser.parse_args()
 
     from_day = parse_day(args.from_date)
@@ -143,6 +169,7 @@ def main():
         args.hot_days,
         args.cold_days,
         parse_now(args.now_utc),
+        args.force_merge,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +184,7 @@ def main():
     print(f"HOT_AFTER_DAYS={layout['hot_after_days']}")
     print(f"SNAPSHOT_AFTER_DAYS={layout['snapshot_after_days']}")
     print(f"COLD_DAYS={layout['cold_age_window_days']}")
+    print(f"FORCE_MERGE={layout['force_merge']}")
 
 
 if __name__ == "__main__":

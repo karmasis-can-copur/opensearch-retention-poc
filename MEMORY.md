@@ -100,8 +100,8 @@ File: `opensearch/lifecycle/dataskope-ism-policy.hot-cold-snapshot-10-10.poc.jso
 State flow:
 
 - `hot`: priority 100, transition to cold after `min_index_age=10d`.
-- `cold`: read_only, force_merge max_num_segments=1, allocation require `temp=cold`, priority 50.
-- `snapshot_ready`: read_only, force_merge, allocation require `temp=frozen`, snapshot to `dataskope_lifecycle_repo`, convert to `remote_$1`, delete source index after cold/index age reaches `20d`.
+- `cold`: read_only, optional force_merge max_num_segments=1, allocation require `temp=cold`, priority 50.
+- `snapshot_ready`: read_only, optional force_merge, allocation require `temp=frozen`, snapshot to `dataskope_lifecycle_repo`, convert to `remote_$1`, delete source index after cold/index age reaches `20d`.
 
 `bootstrap-lifecycle.sh` sets ISM job interval to 1 minute for PoC observation.
 
@@ -111,7 +111,7 @@ State flow:
 - `scripts/bootstrap-lifecycle.sh`: waits for cluster, registers MinIO repo, upserts ISM policy, puts index template.
 - `scripts/poc-status.sh`: shows health, nodes, index/stage summary.
 - `scripts/preflight-real-dump.sh`: checks dump files and storage before ingest.
-- `scripts/make-window-policy.py`: generates a native min_index_age policy for a historical date window.
+- `scripts/make-window-policy.py`: generates a native min_index_age policy for a historical date window and supports `--force-merge none|cold|snapshot|both`.
 - `scripts/run-real-retention-managed-ingest.sh`: ingests day by day, waits for expected stage, records CSV metrics.
 - `scripts/remote-run-dump-replay.sh`: runs producer against one elasticdump file.
 - `scripts/fast-elasticdump-replay.py`: bulk replay path used by managed ingest.
@@ -449,6 +449,15 @@ Remote smoke validation on docker-os-cls:
 - Pre-fix rejected events are preserved in `artifacts/rejected-events/fast-elasticdump-replay-errors.before-field-limit-20260521.ndjson`.
 - Force-merge was the dominant cold-stage cost; observed transient store peaked around 10.2-14.1GB for final 4.5-6.9GB cold shards. Relocation of those shards took a few minutes after allocation started.
 - Evidence doc: `docs/real-dump-window-3-3-3-2026-05-21.md`.
+
+## 2026-05-22 Force-Merge Decision
+
+- Force-merge is now treated as product-configurable, not mandatory.
+- `scripts/make-window-policy.py` supports `--force-merge none|cold|snapshot|both`.
+- Real-data comparison showed little disk gain: Elastic 7.16 hot and OpenSearch hot/cold force-merged sizes are in the same band for Dec04-Dec09.
+- Recommended default is `force_merge=none`; enable per stage only if segment count, query latency, or snapshot/restore metadata overhead proves it is useful.
+- Estimated no-force retention transition cost from the measured ISM history: cold about 2-5 minutes per index, searchable snapshot about 5-8 minutes per index, instead of 16-19 minutes with force-merge.
+- Final report: `docs/final-retention-report-2026-05-22.md`.
 
 Important user constraint:
 

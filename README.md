@@ -5,7 +5,7 @@ This repository contains the Dataskope PoC for replacing the current Elasticsear
 The PoC compares two target shapes:
 
 - Hot + searchable snapshot: simpler target for maximizing searchable retention with less local cluster disk.
-- Hot + cold + searchable snapshot: keeps a 10-day read-only/force-merged local cold window before searchable snapshots.
+- Hot + cold + searchable snapshot: keeps a 10-day read-only local cold window before searchable snapshots; force-merge is product-configurable.
 
 Current real-data target:
 
@@ -91,6 +91,7 @@ The replay mode streams elasticdump lines, extracts `_source`, routes by `TimeCr
 - [Dev Team Lead Demo Runbook](docs/team-lead-demo.md)
 - [Real Dump Smoke 2026-05-20](docs/real-dump-smoke-2026-05-20.md)
 - [Real Dump Window 2026-05-21](docs/real-dump-window-3-3-3-2026-05-21.md)
+- [Final Retention Report 2026-05-22](docs/final-retention-report-2026-05-22.md)
 - [Architecture Comparison](docs/architecture-comparison.md)
 - [Search Guidelines](docs/search-guidelines.md)
 - [Cluster Calculator](docs/calculator.md)
